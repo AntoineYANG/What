@@ -2,7 +2,7 @@
  * @Author: Antoine YANG 
  * @Date: 2019-09-18 15:40:42 
  * @Last Modified by: Antoine YANG
- * @Last Modified time: 2019-09-18 20:28:00
+ * @Last Modified time: 2019-09-23 01:34:04
  */
 
 import $ from 'jQuery';
@@ -17,11 +17,11 @@ namespace What {
         private settings: Array<{attr: string, val: ((data?: S & { key: string | number }, index?: number) => (string | number)) | string | number}>;
         private readonly _parent: JQuery<HTMLElement>;
         private tag: string;
-        private svg: Array<WhatSVG>;
+        private svg: {};
 
         public constructor(parent: JQuery<HTMLElement>) {
             this._parent = parent;
-            this.svg = [];
+            this.svg = {};
             this.tag = "circle";
             this.settings = [];
         }
@@ -36,50 +36,76 @@ namespace What {
             this.render();
         }
 
+        public resize(data: Array<S & { key: string | number }>): void {
+            this._data = data;
+            setTimeout(() => {
+                let box: {} = {};
+                let update: {} = {};
+                for (let i: number = 0; i < this._data.length; i++) {
+                    update[this._data[i].key] = true;
+                    if (!this.svg.hasOwnProperty(this._data[i].key)) {
+                        let s: WhatSVG = new WhatSVG(this._data[i].key, this._parent);
+                        box[this._data[i].key] = s;
+                        let virtualDOM: {} = {};
+                        this.settings.forEach(set => {
+                            virtualDOM[set.attr] = typeof set.val === "function" ? set.val(this._data[i], i) : set.val;
+                        });
+                        s.setState({ ...virtualDOM, tag: this.tag });
+                    }
+                }
+                for (const key in this.svg) {
+                    if (this.svg.hasOwnProperty(key)) {
+                        if (!update.hasOwnProperty(key)) {
+                            const element: WhatSVG = this.svg[key];
+                            element.remove();
+                            this.svg[key] = null;
+                        }
+                    }
+                }
+                this.svg = box;
+            });
+        }
+
         public each(...settings: Array<{attr: string, val: ((data?: S & { key: string | number }, index?: number) => (string | number)) | string | number}>): WhatData<S> {
             this.settings = settings;
             return this;
         }
 
         protected render(): void {
-            let box: Array<WhatSVG> = [];
-            for (let i: number = 0; i < this._data.length; i++) {
-                let flag: boolean = false;
-                for (let e: number = 0; e < this.svg.length; e++) {
-                    if (this.svg[e].getKey() === this._data[i].key) {
-                        flag = true;
-                        box.push(this.svg[e]);
+            setTimeout(() => {
+                let box: {} = {};
+                let update: {} = {};
+                for (let i: number = 0; i < this._data.length; i++) {
+                    update[this._data[i].key] = true;
+                    if (this.svg.hasOwnProperty(this._data[i].key)) {
+                        box[this._data[i].key] = this.svg[this._data[i].key];
                         let virtualDOM: {} = {};
                         this.settings.forEach(set => {
                             virtualDOM[set.attr] = typeof set.val === "function" ? set.val(this._data[i], i) : set.val;
                         });
-                        this.svg[e].setState({ ...virtualDOM, tag: this.tag });
-                        break;
+                        this.svg[this._data[i].key].setState({ ...virtualDOM, tag: this.tag });
+                    }
+                    else {
+                        let s: WhatSVG = new WhatSVG(this._data[i].key, this._parent);
+                        box[this._data[i].key] = s;
+                        let virtualDOM: {} = {};
+                        this.settings.forEach(set => {
+                            virtualDOM[set.attr] = typeof set.val === "function" ? set.val(this._data[i], i) : set.val;
+                        });
+                        s.setState({ ...virtualDOM, tag: this.tag });
                     }
                 }
-                if (!flag) {
-                    let s: WhatSVG = new WhatSVG(this._data[i].key, this._parent);
-                    box.push(s);
-                    let virtualDOM: {} = {};
-                    this.settings.forEach(set => {
-                        virtualDOM[set.attr] = typeof set.val === "function" ? set.val(this._data[i], i) : set.val;
-                    });
-                    s.setState({ ...virtualDOM, tag: this.tag });
-                }
-            }
-            for (let i: number = 0; i < this.svg.length; i++) {
-                let flag: boolean = false;
-                for (let e: number = 0; e < this._data.length; e++) {
-                    if (this.svg[i].getKey() === this._data[e].key) {
-                        flag = true;
-                        break;
+                for (const key in this.svg) {
+                    if (this.svg.hasOwnProperty(key)) {
+                        if (!update.hasOwnProperty(key)) {
+                            const element: WhatSVG = this.svg[key];
+                            element.remove();
+                            this.svg[key] = null;
+                        }
                     }
                 }
-                if (!flag) {
-                    this.svg[i].remove();
-                }
-            }
-            this.svg = box;
+                this.svg = box;
+            });
         };
     };
 
@@ -108,32 +134,43 @@ namespace What {
             $(this.reference).remove();
         }
 
+        protected mount(tag: string): void {
+            this.reference = $(jQuery.parseXML(`<${tag} xmlns="http://www.w3.org/2000/svg" />`).documentElement);
+            this.parent.append(this.reference);
+        }
+
         protected render(): void {
-            if (!this.reference) {
-                this.reference = $(jQuery.parseXML(
-                        `<${this.state.tag} xmlns="http://www.w3.org/2000/svg" />`
-                    ).documentElement);
-                this.parent.append(this.reference);
-            }
-            let virtual: {} = this.state;
-            for (const key in virtual) {
-                if (key.toString() === "tag") {
-                    continue;
-                }
-                if (virtual.hasOwnProperty(key)) {
-                    const element = virtual[key];
-                    if (this.virtualdom.hasOwnProperty(key) && this.virtualdom[key] === element) {
-                        continue;
+            setTimeout(() => {
+                let virtual: {} = this.state;
+                for (const key in virtual) {
+                    if (virtual.hasOwnProperty(key)) {
+                        if (key.toString() === "tag") {
+                            continue;
+                        }
+                        const element = virtual[key];
+                        if (this.virtualdom.hasOwnProperty(key) && this.virtualdom[key] === element) {
+                            continue;
+                        }
+                        $(this.reference).attr(key.toString(), element.toString());
                     }
-                    $(this.reference).attr(key.toString(), element.toString());
                 }
+                this.virtualdom = { ...this.virtualdom, ...virtual };
+            });
+        }
+
+        protected selfShouldUpdate<K extends keyof S>(state: Pick<S&{}, K>): boolean {
+            if (!this.reference) {
+                this.mount((Object(state)).tag);
+                return true;
             }
-            this.virtualdom = { ...this.virtualdom, ...virtual };
+            return true;
         }
 
         public setState<K extends keyof S>(state: Pick<S&{}, K>): WhatSVG<S> {
-            this.state = { ...this.state, ...state };
-            this.render();
+            if (this.selfShouldUpdate(state)) {
+                this.state = { ...this.state, ...state };
+                this.render();
+            }
             return this;
         }
     };

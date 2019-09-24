@@ -2,21 +2,10 @@
 * @Author: Antoine YANG
 * @Date: 2019-09-18 15:40:42
  * @Last Modified by: Antoine YANG
- * @Last Modified time: 2019-09-18 20:25:03
+ * @Last Modified time: 2019-09-23 02:51:51
 */
 
 "use strict";
-var __assign = (this && this.__assign) || function () {
-    __assign = Object.assign || function(t) {
-        for (var s, i = 1, n = arguments.length; i < n; i++) {
-            s = arguments[i];
-            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
-                t[p] = s[p];
-        }
-        return t;
-    };
-    return __assign.apply(this, arguments);
-};
 
 
 var What;
@@ -24,7 +13,7 @@ var What;
     var WhatData = /** @class */ (function () {
         function WhatData(parent) {
             this._parent = parent;
-            this.svg = [];
+            this.svg = {};
             this.tag = "circle";
             this.settings = [];
         }
@@ -36,53 +25,87 @@ var What;
             this._data = data;
             this.render();
         };
-        WhatData.prototype.each = function () {
-            var settings = [];
-            for (var _i = 0; _i < arguments.length; _i++) {
-                settings[_i] = arguments[_i];
-            }
-            this.settings = settings;
-            return this;
-        };
-        WhatData.prototype.render = function () {
-            let box = [];
-            for (let i = 0; i < this._data.length; i++) {
-                let flag = false;
-                for (let e = 0; e < this.svg.length; e++) {
-                    if (this.svg[e].getKey() === this._data[i].key) {
-                        flag = true;
-                        box.push(this.svg[e]);
+        WhatData.prototype.resize = function (data) {
+            this._data = data;
+            setTimeout(() => {
+                let box = {};
+                let update = {};
+                for (let i = 0; i < this._data.length; i++) {
+                    update[this._data[i].key] = true;
+                    if (!this.svg.hasOwnProperty(this._data[i].key)) {
+                        let s = new WhatSVG(this._data[i].key, this._parent);
+                        box[this._data[i].key] = s;
                         let virtualDOM = {};
                         this.settings.forEach(set => {
                             virtualDOM[set.attr] = typeof set.val === "function" ? set.val(this._data[i], i) : set.val;
                         });
-                        this.svg[e].setState({ ...virtualDOM, tag: this.tag });
-                        break;
+                        s.setState({ ...virtualDOM, tag: this.tag });
                     }
                 }
-                if (!flag) {
-                    let s = new WhatSVG(this._data[i].key, this._parent);
-                    box.push(s);
-                    let virtualDOM = {};
-                    this.settings.forEach(set => {
-                        virtualDOM[set.attr] = typeof set.val === "function" ? set.val(this._data[i], i) : set.val;
-                    });
-                    s.setState({ ...virtualDOM, tag: this.tag });
-                }
-            }
-            for (let i = 0; i < this.svg.length; i++) {
-                let flag = false;
-                for (let e = 0; e < this._data.length; e++) {
-                    if (this._data[e].key === this.svg[i].getKey()) {
-                        flag = true;
-                        break;
+                for (const key in this.svg) {
+                    if (this.svg.hasOwnProperty(key)) {
+                        if (!update.hasOwnProperty(key)) {
+                            const element = this.svg[key];
+                            element.remove();
+                            this.svg[key] = null;
+                        }
                     }
                 }
-                if (!flag) {
-                    this.svg[i].remove();
+                this.svg = box;
+                stop();
+            });
+        };
+        WhatData.prototype.each = function (...settings) {
+            this.settings = settings;
+            return this;
+        };
+        WhatData.prototype.render = function () {
+            let box = {};
+            let update = {};
+            let process = 0;
+            let i = 0;
+            let loop = () => {setTimeout(() => {
+                i = process;
+                if (i >= this._data.length) {
+                    for (const key in this.svg) {
+                        if (this.svg.hasOwnProperty(key)) {
+                            if (!update.hasOwnProperty(key)) {
+                                const element = this.svg[key];
+                                element.remove();
+                                this.svg[key] = null;
+                            }
+                        }
+                    }
+                    this.svg = box;
+                    loop = () => {};
+                    stop();
                 }
-            }
-            this.svg = box;
+                else {
+                    for (; i < process + 200 && i < this._data.length; i++) {
+                        update[this._data[i].key] = true;
+                        if (this.svg.hasOwnProperty(this._data[i].key)) {
+                            box[this._data[i].key] = this.svg[this._data[i].key];
+                            let virtualDOM = {};
+                            this.settings.forEach(set => {
+                                virtualDOM[set.attr] = typeof set.val === "function" ? set.val(this._data[i], i) : set.val;
+                            });
+                            this.svg[this._data[i].key].setState({ ...virtualDOM, tag: this.tag });
+                        }
+                        else {
+                            let s = new WhatSVG(this._data[i].key, this._parent);
+                            box[this._data[i].key] = s;
+                            let virtualDOM = {};
+                            this.settings.forEach(set => {
+                                virtualDOM[set.attr] = typeof set.val === "function" ? set.val(this._data[i], i) : set.val;
+                            });
+                            s.setState({ ...virtualDOM, tag: this.tag });
+                        }
+                    }
+                    process += 200;
+                    setTimeout(loop(), 0);
+                }
+            });}
+            loop();
         };
         return WhatData;
     }());
@@ -103,29 +126,40 @@ var What;
         WhatSVG.prototype.remove = function () {
             $(this.reference).remove();
         };
+        WhatSVG.prototype.mount = function (tag) {
+            this.reference = jQuery.parseXML("<" + tag + " xmlns=\"http://www.w3.org/2000/svg\" />").documentElement;
+            this.parent.append(this.reference);
+        };
         WhatSVG.prototype.render = function () {
-            if (!this.reference) {
-                this.reference = jQuery.parseXML("<" + this.state.tag + " xmlns=\"http://www.w3.org/2000/svg\" />").documentElement;
-                $(this.parent).append(this.reference);
-            }
-            var virtual = this.state;
-            for (var key in virtual) {
-                if (key.toString() === "tag") {
-                    continue;
-                }
-                if (virtual.hasOwnProperty(key)) {
-                    var element = virtual[key];
-                    if (this.virtualdom.hasOwnProperty(key) && this.virtualdom[key] === element) {
-                        continue;
+            setTimeout(() => {
+                let virtual = this.state;
+                for (const key in virtual) {
+                    if (virtual.hasOwnProperty(key)) {
+                        if (key.toString() === "tag") {
+                            continue;
+                        }
+                        const element = virtual[key];
+                        if (this.virtualdom.hasOwnProperty(key) && this.virtualdom[key] === element) {
+                            continue;
+                        }
+                        $(this.reference).attr(key.toString(), element.toString());
                     }
-                    $(this.reference).attr(key.toString(), element.toString());
                 }
+                this.virtualdom = { ...this.virtualdom, ...virtual };
+            });
+        };
+        WhatSVG.prototype.selfShouldUpdate = function (state) {
+            if (!this.reference) {
+                this.mount(state.tag);
+                return true;
             }
-            this.virtualdom = __assign({}, this.virtualdom, virtual);
+            return true;
         };
         WhatSVG.prototype.setState = function (state) {
-            this.state = __assign({}, this.state, state);
-            this.render();
+            if (this.selfShouldUpdate(state)) {
+                this.state = { ...this.state, ...state };
+                this.render();
+            }
             return this;
         };
         return WhatSVG;
